@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f2933" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>MH Timetabler</title>
+    <meta name="description" content="Progressive web app for managing school timetables." />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>MH Timetabler</h1>
+      <button id="installButton" class="hidden">Install App</button>
+    </header>
+    <main>
+      <section class="view-toggle">
+        <button id="dayViewBtn" class="active">Today</button>
+        <button id="editViewBtn">Weekly Editor</button>
+      </section>
+      <section id="dayView" class="view active">
+        <div class="day-header">
+          <div class="day-header__title">
+            <h2 id="dayName"></h2>
+            <label class="day-selector">
+              <span class="sr-only">Select day</span>
+              <select id="daySelector"></select>
+            </label>
+          </div>
+          <div id="dayProgress" class="day-progress">
+            <div class="progress-bar">
+              <div class="progress-bar__fill" id="dayProgressFill"></div>
+            </div>
+            <span id="dayProgressLabel"></span>
+          </div>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+      <section id="editView" class="view">
+        <h2>Weekly Timetable Editor</h2>
+        <p class="helper-text">Update each period for the week. Changes save automatically.</p>
+        <div class="editor-container">
+          <table id="editorTable">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Monday</th>
+                <th>Tuesday</th>
+                <th>Wednesday</th>
+                <th>Thursday</th>
+                <th>Friday</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <p>Timetable data is stored on this device.</p>
+    </footer>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
