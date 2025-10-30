@@ -27,12 +27,11 @@ body {
 }
 
 .app-header {
-  background: var(--panel);
+  background: transparent;
   padding: 1rem 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: var(--shadow);
   z-index: 2;
 }
 
@@ -76,17 +75,15 @@ body {
 
 .day-view {
   flex: 1;
-  background: var(--panel);
-  border-radius: 16px;
-  padding: clamp(1.25rem, 2.5vw, 2rem);
-  box-shadow: var(--shadow);
-  width: min(620px, 100%);
-  max-width: 620px;
+  width: min(640px, 100%);
+  max-width: 640px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   height: 100%;
   min-height: 0;
+  padding: clamp(1.25rem, 2.5vw, 2rem);
 }
 
 .day-view-header {
@@ -313,10 +310,7 @@ footer {
 }
 
 .hint {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  text-align: center;
+  display: none;
 }
 
 @media (max-height: 720px) {
