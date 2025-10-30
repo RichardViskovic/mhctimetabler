@@ -1,303 +1,421 @@
-const storageKey = "mhTimetable:v1";
+const STORAGE_KEY = "mhc-timetabler-schedule-v1";
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-
-const scheduleTemplate = [
-  { id: "period1", label: "Period 1", type: "class", start: "08:45", end: "09:45" },
-  { id: "period2", label: "Period 2", type: "class", start: "09:45", end: "10:45" },
-  { id: "break1", label: "Break 1", type: "break", start: "10:45", end: "11:15" },
-  { id: "period3", label: "Period 3", type: "class", start: "11:15", end: "12:15" },
-  { id: "break2", label: "Break 2", type: "break", start: "12:15", end: "12:40" },
-  { id: "period4", label: "Period 4", type: "class", start: "12:40", end: "13:40" },
-  { id: "break3", label: "Break 3", type: "break", start: "13:40", end: "14:00" },
-  { id: "period5", label: "Period 5", type: "class", start: "14:00", end: "15:00" },
+const DAY_BLOCKS = [
+  { id: "period1", label: "Period 1", start: "08:45", end: "09:45", type: "class" },
+  { id: "period2", label: "Period 2", start: "09:45", end: "10:45", type: "class" },
+  { id: "break1", label: "Break 1", start: "10:45", end: "11:15", type: "break" },
+  { id: "period3", label: "Period 3", start: "11:15", end: "12:15", type: "class" },
+  { id: "break2", label: "Break 2", start: "12:15", end: "12:40", type: "break" },
+  { id: "period4", label: "Period 4", start: "12:40", end: "13:40", type: "class" },
+  { id: "break3", label: "Break 3", start: "13:40", end: "14:00", type: "break" },
+  { id: "period5", label: "Period 5", start: "14:00", end: "15:00", type: "class" }
 ];
 
-const periodOnlyIds = scheduleTemplate.filter((block) => block.type === "class").map((block) => block.id);
-
-const elements = {
-  dayName: document.getElementById("dayName"),
-  daySelector: document.getElementById("daySelector"),
-  dayProgressFill: document.getElementById("dayProgressFill"),
-  dayProgressLabel: document.getElementById("dayProgressLabel"),
-  timeline: document.getElementById("timeline"),
-  editorBody: document.querySelector("#editorTable tbody"),
-  dayView: document.getElementById("dayView"),
-  editView: document.getElementById("editView"),
-  dayViewBtn: document.getElementById("dayViewBtn"),
-  editViewBtn: document.getElementById("editViewBtn"),
-  installButton: document.getElementById("installButton"),
+const defaultSchedule = {
+  Monday: {
+    period1: "English",
+    period2: "Mathematics",
+    period3: "Science",
+    period4: "Music",
+    period5: "Sport"
+  },
+  Tuesday: {
+    period1: "Geography",
+    period2: "Mathematics",
+    period3: "Engineering",
+    period4: "Science Lab",
+    period5: "Drama"
+  },
+  Wednesday: {
+    period1: "History",
+    period2: "Mathematics",
+    period3: "Physical Education",
+    period4: "English",
+    period5: "Art"
+  },
+  Thursday: {
+    period1: "Science",
+    period2: "Mathematics",
+    period3: "English",
+    period4: "Languages",
+    period5: "Computing"
+  },
+  Friday: {
+    period1: "Assembly",
+    period2: "Mathematics",
+    period3: "Community Project",
+    period4: "Health",
+    period5: "Clubs"
+  }
 };
 
-let installPromptEvent = null;
-let timetable = loadTimetable();
-let autosaveTimeout = null;
+const editorBody = document.querySelector("#editorBody");
+const daySelect = document.querySelector("#daySelect");
+const dayEvents = document.querySelector("#dayEvents");
+const currentTimeDisplay = document.querySelector("#currentTime");
+const progressBar = document.querySelector(".progress-bar");
+const progressFill = document.querySelector("#progressFill");
+const installButton = document.querySelector("#installButton");
+const installHint = document.querySelector("#installHint");
+const editorDialog = document.querySelector("#editorDialog");
 
-init();
+const inputRefs = new Map();
+const LONG_PRESS_DELAY = 600;
 
-function init() {
-  populateDaySelector();
-  buildEditor();
-  setupViewToggle();
-  renderDayView();
-  setupAutoRefresh();
-  setupInstallPrompt();
-  registerServiceWorker();
-}
+let schedule = loadSchedule();
+let selectedDay = getInitialDay();
+let deferredPrompt = null;
 
-function getDefaultTimetable() {
-  const template = {};
-  days.forEach((day) => {
-    template[day] = {};
-    periodOnlyIds.forEach((id) => {
-      template[day][id] = "";
-    });
-  });
-  return template;
-}
+renderEditor();
+populateDaySelector();
+renderDayView();
+startTicker();
+setupInstallPrompt();
+registerServiceWorker();
+editorDialog?.addEventListener("close", () => highlightEditorRow(null));
 
-function loadTimetable() {
-  const existing = localStorage.getItem(storageKey);
-  if (!existing) {
-    return getDefaultTimetable();
-  }
-
+function loadSchedule() {
   try {
-    const parsed = JSON.parse(existing);
-    days.forEach((day) => {
-      if (!parsed[day]) {
-        parsed[day] = {};
-      }
-      periodOnlyIds.forEach((id) => {
-        if (typeof parsed[day][id] !== "string") {
-          parsed[day][id] = "";
-        }
-      });
-    });
-    return parsed;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return { ...defaultSchedule, ...JSON.parse(stored) };
+    }
   } catch (error) {
-    console.warn("Failed to parse stored timetable, resetting.", error);
-    return getDefaultTimetable();
+    console.warn("Could not load stored schedule", error);
   }
+  return JSON.parse(JSON.stringify(defaultSchedule));
 }
 
-function saveTimetable() {
-  localStorage.setItem(storageKey, JSON.stringify(timetable));
+function saveSchedule() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(schedule));
 }
 
-function populateDaySelector() {
-  days.forEach((day) => {
-    const option = document.createElement("option");
-    option.value = day;
-    option.textContent = day;
-    elements.daySelector.appendChild(option);
-  });
-
-  const todayIndex = new Date().getDay(); // 0 = Sun
-  const defaultDay = days[todayIndex - 1] || "Monday";
-  elements.daySelector.value = defaultDay;
-  elements.daySelector.addEventListener("change", renderDayView);
+function getInitialDay() {
+  const today = new Date();
+  const dayIndex = today.getDay(); // Sunday = 0
+  if (dayIndex >= 1 && dayIndex <= 5) {
+    return DAYS[dayIndex - 1];
+  }
+  return "Monday";
 }
 
-function buildEditor() {
-  elements.editorBody.innerHTML = "";
-  periodOnlyIds.forEach((periodId) => {
-    const periodInfo = scheduleTemplate.find((item) => item.id === periodId);
+function renderEditor() {
+  editorBody.innerHTML = "";
+  inputRefs.clear();
+  DAY_BLOCKS.filter(block => block.type === "class").forEach(block => {
     const row = document.createElement("tr");
+    row.dataset.blockId = block.id;
 
-    const periodCell = document.createElement("th");
-    periodCell.scope = "row";
-    periodCell.textContent = periodInfo.label;
-    row.appendChild(periodCell);
+    const periodHeader = document.createElement("th");
+    periodHeader.scope = "row";
+    periodHeader.textContent = `${block.label} (${block.start} - ${block.end})`;
+    row.appendChild(periodHeader);
 
-    days.forEach((day) => {
+    DAYS.forEach(day => {
       const cell = document.createElement("td");
       const input = document.createElement("input");
       input.type = "text";
+      input.className = "period-input";
+      input.name = `${day}-${block.id}`;
+      input.value = schedule[day]?.[block.id] ?? "";
       input.placeholder = "Add class";
-      input.value = timetable[day][periodId];
-      input.addEventListener("input", () => handleInputChange(day, periodId, input.value));
+      input.addEventListener("input", event => {
+        schedule[day] = schedule[day] ?? {};
+        schedule[day][block.id] = event.target.value.trim();
+        saveSchedule();
+        if (day === selectedDay) {
+          renderDayView();
+        }
+      });
       cell.appendChild(input);
       row.appendChild(cell);
+      inputRefs.set(input.name, input);
     });
 
-    elements.editorBody.appendChild(row);
+    editorBody.appendChild(row);
   });
 }
 
-function handleInputChange(day, periodId, value) {
-  timetable[day][periodId] = value.trim();
-  window.clearTimeout(autosaveTimeout);
-  autosaveTimeout = window.setTimeout(() => {
-    saveTimetable();
+function populateDaySelector() {
+  daySelect.innerHTML = "";
+  DAYS.forEach(day => {
+    const option = document.createElement("option");
+    option.value = day;
+    option.textContent = day;
+    if (day === selectedDay) {
+      option.selected = true;
+    }
+    daySelect.appendChild(option);
+  });
+
+  daySelect.addEventListener("change", event => {
+    selectedDay = event.target.value;
     renderDayView();
-  }, 250);
+  });
 }
 
 function renderDayView() {
-  const selectedDay = elements.daySelector.value;
-  const selectedIndex = Math.max(0, days.indexOf(selectedDay));
-  const baseDate = getDateForDay(selectedIndex);
-  const now = new Date();
+  dayEvents.innerHTML = "";
+  DAY_BLOCKS.forEach(block => {
+    const listItem = document.createElement("li");
+    listItem.className = `day-event ${block.type}`;
+    listItem.dataset.blockId = block.id;
 
-  elements.dayName.textContent = selectedDay;
-  elements.timeline.innerHTML = "";
+    const timeRange = document.createElement("time");
+    timeRange.setAttribute("datetime", `${block.start}-${block.end}`);
+    timeRange.textContent = `${block.start} – ${block.end}`;
 
-  scheduleTemplate.forEach((block) => {
-    const { startDate, endDate } = resolveBlockWindow(block, baseDate);
-    const status = determineStatus(now, startDate, endDate);
-    const card = document.createElement("article");
-    card.classList.add("event-card", block.type, status);
+    const details = document.createElement("div");
+    details.className = "event-details";
 
-    const title = document.createElement("h3");
-    const className = timetable[selectedDay]?.[block.id];
-    title.textContent = block.type === "class" ? className || block.label : block.label;
+    const title = document.createElement("span");
+    title.className = "event-title";
+    const displayTitle =
+      block.type === "class"
+        ? schedule[selectedDay]?.[block.id] || "Free Study"
+        : block.label;
+    title.textContent = displayTitle;
 
-    const timeLabel = document.createElement("p");
-    timeLabel.className = "event-time";
-    timeLabel.textContent = `${formatTime(block.start)} – ${formatTime(block.end)}`;
+    const subtitle = document.createElement("span");
+    subtitle.className = "event-subtitle";
+    subtitle.textContent =
+      block.type === "class" ? block.label : "Recharge and reset";
 
-    const tag = document.createElement("span");
-    tag.className = "event-tag";
-    tag.textContent = block.type === "break" ? "Break" : "Class";
+    details.append(title, subtitle);
 
-    card.appendChild(tag);
-    card.appendChild(title);
-    card.appendChild(timeLabel);
+    const progressOverlay = document.createElement("span");
+    progressOverlay.className = "event-progress";
 
-    if (status === "in-progress" && block.type === "class") {
-      const progress = document.createElement("div");
-      progress.className = "event-progress";
+    listItem.append(progressOverlay, timeRange, details);
 
-      const fill = document.createElement("div");
-      fill.className = "event-progress__fill";
-      fill.style.width = `${getElapsedPercentage(now, startDate, endDate)}%`;
-      progress.appendChild(fill);
-      card.appendChild(progress);
+    const state = getBlockState(block);
+    listItem.classList.add(state);
+
+    const progress = getBlockProgress(block);
+    progressOverlay.style.width = `${progress}%`;
+
+    if (block.type === "class") {
+      listItem.tabIndex = 0;
+      listItem.setAttribute(
+        "aria-label",
+        `Edit ${displayTitle} for ${selectedDay} (${block.label})`
+      );
+      listItem.setAttribute("role", "button");
+      setupInteraction(listItem, block);
     }
 
-    elements.timeline.appendChild(card);
+    dayEvents.appendChild(listItem);
   });
-
-  updateDayProgress(now, baseDate);
 }
 
-function determineStatus(now, startDate, endDate) {
-  if (now < startDate) {
-    return "upcoming";
-  }
-  if (now > endDate) {
-    return "completed";
-  }
-  return "in-progress";
-}
-
-function updateDayProgress(now, baseDate) {
-  const firstBlock = scheduleTemplate[0];
-  const lastBlock = scheduleTemplate[scheduleTemplate.length - 1];
-  const dayStart = resolveBlockWindow(firstBlock, baseDate).startDate;
-  const dayEnd = resolveBlockWindow(lastBlock, baseDate).endDate;
-
-  let progressPercent;
-  let label;
-
-  if (now <= dayStart) {
-    progressPercent = 0;
-    label = `Starts ${formatTime(firstBlock.start)}`;
-  } else if (now >= dayEnd) {
-    progressPercent = 100;
-    label = "Day complete";
-  } else {
-    progressPercent = getElapsedPercentage(now, dayStart, dayEnd);
-    label = `${progressPercent.toFixed(0)}%`;
-  }
-
-  elements.dayProgressFill.style.width = `${progressPercent}%`;
-  elements.dayProgressLabel.textContent = label;
-}
-
-function setupAutoRefresh() {
-  window.setInterval(renderDayView, 60_000);
-}
-
-function setupViewToggle() {
-  elements.dayViewBtn.addEventListener("click", () => switchView("day"));
-  elements.editViewBtn.addEventListener("click", () => switchView("edit"));
-}
-
-function switchView(target) {
-  const isDay = target === "day";
-  elements.dayView.classList.toggle("active", isDay);
-  elements.editView.classList.toggle("active", !isDay);
-  elements.dayViewBtn.classList.toggle("active", isDay);
-  elements.editViewBtn.classList.toggle("active", !isDay);
-}
-
-function resolveBlockWindow(block, baseDate) {
-  const startDate = sliceTime(baseDate, block.start);
-  const endDate = sliceTime(baseDate, block.end);
-  return { startDate, endDate };
-}
-
-function sliceTime(date, time) {
-  const [hours, minutes] = time.split(":").map(Number);
-  const sliced = new Date(date);
-  sliced.setHours(hours, minutes, 0, 0);
-  return sliced;
-}
-
-function getDateForDay(dayIndex) {
+function getBlockState(block) {
   const now = new Date();
-  const currentDay = now.getDay(); // Sunday = 0
-  const target = dayIndex + 1; // align Monday = 1
-  const diff = target - currentDay;
-  const date = new Date(now);
-  date.setDate(now.getDate() + diff);
-  return date;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = toMinutes(block.start);
+  const endMinutes = toMinutes(block.end);
+  if (currentMinutes >= endMinutes) {
+    return "complete";
+  }
+  if (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
+    return "in-progress";
+  }
+  return "upcoming";
 }
 
-function getElapsedPercentage(now, start, end) {
-  const elapsed = now - start;
-  const total = end - start;
-  const ratio = Math.max(0, Math.min(1, elapsed / total));
-  return ratio * 100;
+function getBlockProgress(block) {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = toMinutes(block.start);
+  const endMinutes = toMinutes(block.end);
+
+  if (currentMinutes <= startMinutes) {
+    return 0;
+  }
+  if (currentMinutes >= endMinutes) {
+    return 100;
+  }
+
+  const elapsed = currentMinutes - startMinutes;
+  const duration = endMinutes - startMinutes;
+  return Math.min(100, Math.max(0, (elapsed / duration) * 100));
 }
 
-function formatTime(time) {
-  const [hours, minutes] = time.split(":").map(Number);
-  const date = new Date();
-  date.setHours(hours, minutes, 0, 0);
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-function setupInstallPrompt() {
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    installPromptEvent = event;
-    elements.installButton.classList.remove("hidden");
+function setupInteraction(element, block) {
+  setupLongPress(element, block);
+  element.addEventListener("dblclick", () => openEditor(block));
+  element.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+      event.preventDefault();
+      openEditor(block);
+    }
   });
+}
 
-  elements.installButton.addEventListener("click", async () => {
-    if (!installPromptEvent) {
+function setupLongPress(element, block) {
+  let timerId = null;
+
+  const startPress = event => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
       return;
     }
-
-    installPromptEvent.prompt();
-    const { outcome } = await installPromptEvent.userChoice;
-    if (outcome === "accepted") {
-      elements.installButton.classList.add("hidden");
+    clearTimeout(timerId);
+    if (typeof element.setPointerCapture === "function" && event.pointerId !== undefined) {
+      try {
+        element.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore pointer capture failures.
+      }
     }
-    installPromptEvent = null;
+    timerId = window.setTimeout(() => {
+      openEditor(block);
+      timerId = null;
+    }, LONG_PRESS_DELAY);
+  };
+
+  const cancelPress = event => {
+    if (timerId) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    if (
+      event &&
+      typeof element.releasePointerCapture === "function" &&
+      event.pointerId !== undefined &&
+      element.hasPointerCapture?.(event.pointerId)
+    ) {
+      try {
+        element.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore pointer capture release failures.
+      }
+    }
+  };
+
+  element.addEventListener("pointerdown", startPress);
+  element.addEventListener("pointerup", cancelPress);
+  element.addEventListener("pointerleave", cancelPress);
+  element.addEventListener("pointercancel", cancelPress);
+  element.addEventListener("contextmenu", event => {
+    event.preventDefault();
+    cancelPress(event);
+    openEditor(block);
   });
 }
 
-async function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
+function openEditor(block) {
+  if (!editorDialog) {
+    return;
+  }
+  if (typeof editorDialog.showModal === "function" && !editorDialog.open) {
+    editorDialog.showModal();
+  } else if (!editorDialog.open) {
+    editorDialog.setAttribute("open", "");
+  }
+  highlightEditorRow(block.id);
+  requestAnimationFrame(() => focusEditorInput(block.id));
+}
+
+function highlightEditorRow(blockId) {
+  if (!editorBody) {
+    return;
+  }
+  editorBody.querySelectorAll("tr").forEach(row => {
+    const isMatch = blockId && row.dataset.blockId === blockId;
+    row.classList.toggle("editor-highlight", Boolean(isMatch));
+  });
+}
+
+function focusEditorInput(blockId) {
+  const key = `${selectedDay}-${blockId}`;
+  const input = inputRefs.get(key);
+  if (!input) {
     return;
   }
   try {
-    await navigator.serviceWorker.register("/service-worker.js");
+    input.focus({ preventScroll: false });
   } catch (error) {
-    console.warn("Service worker registration failed:", error);
+    input.focus();
+  }
+  input.setSelectionRange(input.value.length, input.value.length);
+  if (typeof input.scrollIntoView === "function") {
+    try {
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+    } catch (error) {
+      input.scrollIntoView();
+    }
+  }
+}
+
+function startTicker() {
+  updateClock();
+  setInterval(() => {
+    updateClock();
+    renderDayView();
+  }, 30 * 1000);
+}
+
+function updateClock() {
+  const now = new Date();
+  currentTimeDisplay.textContent = now.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  const percentage = getDayProgress(now);
+  progressFill.style.width = `${percentage}%`;
+  progressBar?.setAttribute("aria-valuenow", percentage.toFixed(0));
+}
+
+function getDayProgress(date) {
+  const start = DAY_BLOCKS[0];
+  const end = DAY_BLOCKS[DAY_BLOCKS.length - 1];
+
+  const startMinutes = toMinutes(start.start);
+  const endMinutes = toMinutes(end.end);
+  const currentMinutes = date.getHours() * 60 + date.getMinutes();
+
+  if (currentMinutes <= startMinutes) {
+    return 0;
+  }
+  if (currentMinutes >= endMinutes) {
+    return 100;
+  }
+
+  const progress = ((currentMinutes - startMinutes) / (endMinutes - startMinutes)) * 100;
+  return Math.min(100, Math.max(0, progress));
+}
+
+function toMinutes(time) {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function setupInstallPrompt() {
+  window.addEventListener("beforeinstallprompt", event => {
+    event.preventDefault();
+    deferredPrompt = event;
+    installHint.hidden = false;
+  });
+
+  installButton?.addEventListener("click", async () => {
+    if (!deferredPrompt) {
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      installHint.hidden = true;
+    }
+    deferredPrompt = null;
+  });
+}
+
+function registerServiceWorker() {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("service-worker.js")
+        .catch(error => console.warn("Service worker registration failed", error));
+    });
   }
 }

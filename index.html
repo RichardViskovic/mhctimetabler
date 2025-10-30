@@ -3,63 +3,71 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1f2933" />
-    <link rel="manifest" href="manifest.webmanifest" />
+    <title>MHCTimetabler</title>
+    <meta name="theme-color" content="#0d47a1" />
+    <link rel="manifest" href="manifest.json" />
     <link rel="stylesheet" href="styles.css" />
-    <title>MH Timetabler</title>
-    <meta name="description" content="Progressive web app for managing school timetables." />
   </head>
   <body>
     <header class="app-header">
-      <h1>MH Timetabler</h1>
-      <button id="installButton" class="hidden">Install App</button>
+      <h1>MHCTimetabler</h1>
+      <div class="install-hint" id="installHint" hidden>
+        <button id="installButton" type="button">Install App</button>
+      </div>
     </header>
-    <main>
-      <section class="view-toggle">
-        <button id="dayViewBtn" class="active">Today</button>
-        <button id="editViewBtn">Weekly Editor</button>
-      </section>
-      <section id="dayView" class="view active">
-        <div class="day-header">
-          <div class="day-header__title">
-            <h2 id="dayName"></h2>
-            <label class="day-selector">
-              <span class="sr-only">Select day</span>
-              <select id="daySelector"></select>
-            </label>
-          </div>
-          <div id="dayProgress" class="day-progress">
-            <div class="progress-bar">
-              <div class="progress-bar__fill" id="dayProgressFill"></div>
+    <main class="day-layout">
+      <section class="day-view">
+        <div class="day-view-header">
+          <label class="day-selector">
+            <span>Select day</span>
+            <select id="daySelect"></select>
+          </label>
+          <div class="progress" aria-live="polite">
+            <div class="progress-label">
+              <span>Day progress</span>
+              <time id="currentTime">--:--</time>
             </div>
-            <span id="dayProgressLabel"></span>
+            <div
+              class="progress-bar"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span class="progress-fill" id="progressFill"></span>
+            </div>
           </div>
         </div>
-        <div id="timeline" class="timeline"></div>
-      </section>
-      <section id="editView" class="view">
-        <h2>Weekly Timetable Editor</h2>
-        <p class="helper-text">Update each period for the week. Changes save automatically.</p>
-        <div class="editor-container">
-          <table id="editorTable">
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th>Monday</th>
-                <th>Tuesday</th>
-                <th>Wednesday</th>
-                <th>Thursday</th>
-                <th>Friday</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <ul class="day-events" id="dayEvents" aria-live="polite"></ul>
+        <p class="hint">Long-press on any period to edit the weekly timetable.</p>
       </section>
     </main>
-    <footer>
-      <p>Timetable data is stored on this device.</p>
-    </footer>
-    <script src="app.js" type="module"></script>
+    <dialog id="editorDialog" aria-labelledby="weeklyEditorHeading">
+      <form method="dialog" class="dialog-frame">
+        <header class="dialog-header">
+          <h2 id="weeklyEditorHeading">Weekly Timetable Editor</h2>
+          <button type="submit" class="dialog-close" aria-label="Close editor">&times;</button>
+        </header>
+        <p class="helper-text">
+          Update each period name and your changes save automatically to this device.
+        </p>
+        <div class="table-wrapper" role="region" aria-live="polite">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                <th scope="col">Monday</th>
+                <th scope="col">Tuesday</th>
+                <th scope="col">Wednesday</th>
+                <th scope="col">Thursday</th>
+                <th scope="col">Friday</th>
+              </tr>
+            </thead>
+            <tbody id="editorBody"></tbody>
+          </table>
+        </div>
+      </form>
+    </dialog>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
